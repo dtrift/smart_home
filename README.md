@@ -58,18 +58,21 @@ cargo build
 # Run the example
 cargo run
 
-# Run tests
-cargo test
+# Run tests (unit, integration, doctests)
+cargo test --all-features
 
 # Build API documentation (rustdoc); use `cargo doc --open` to view in browser
 cargo doc
 
-# Check code
-cargo clippy
+# Lint (fail on warnings; same flags as CI)
+cargo clippy --all-targets --all-features -- -D warnings
 
-# Format code
-cargo fmt
+# Format check (same as CI; run `cargo fmt --all` to apply formatting)
+cargo fmt --all -- --check
 ```
+
+CI (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs `fmt --check`,
+`clippy` as above, and `cargo test --all-features`.
 
 ## Library Usage
 

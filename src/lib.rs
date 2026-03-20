@@ -1,3 +1,29 @@
+//! Smart home library: rooms, devices (thermometers and sockets), and reports.
+//!
+//! # Modules
+//!
+//! - [`devices`] — [`Thermometer`], [`Socket`], [`Device`], [`DeviceInfo`]
+//! - [`home`] — [`Room`], [`SmartHome`]
+//! - [`types`] — [`Power`], [`Temperature`]
+//!
+//! Types are re-exported at the crate root, so you can write
+//! `use smart_home::{SmartHome, Room, Device, ...}`.
+//!
+//! # Example
+//!
+//! ```
+//! use smart_home::{
+//!     Device, Room, SmartHome, Socket, Thermometer, Temperature, Power,
+//! };
+//!
+//! let devices = vec![
+//!     Device::Thermometer(Thermometer::new("t".to_string(), Temperature::celsius(20.0))),
+//!     Device::Socket(Socket::new("s".to_string(), false, Power::new(10.0).unwrap())),
+//! ];
+//! let room = Room::new("Kitchen".to_string(), devices);
+//! let _home = SmartHome::new("Home".to_string(), vec![room]);
+//! ```
+
 pub mod devices;
 pub mod home;
 pub mod types;
