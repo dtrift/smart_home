@@ -1,5 +1,5 @@
-use crate::socket::Socket;
-use crate::thermometer::Thermometer;
+use super::socket::Socket;
+use super::thermometer::Thermometer;
 
 /// Trait for all smart home devices
 pub trait DeviceInfo {

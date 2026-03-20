@@ -1,4 +1,4 @@
-use crate::room::Room;
+use super::room::Room;
 
 /// Smart home containing an array of rooms
 #[derive(Debug, Clone, PartialEq)]

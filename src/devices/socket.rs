@@ -1,4 +1,4 @@
-use crate::device::DeviceInfo;
+use super::device::DeviceInfo;
 use crate::types::Power;
 
 /// Smart socket for controlling electrical appliances

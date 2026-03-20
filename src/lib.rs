@@ -1,16 +1,10 @@
-pub mod device;
-pub mod room;
-pub mod smart_home;
-pub mod socket;
-pub mod thermometer;
+pub mod devices;
+pub mod home;
 pub mod types;
 
 // Re-exports for convenience
-pub use device::{Device, DeviceInfo};
-pub use room::Room;
-pub use smart_home::SmartHome;
-pub use socket::Socket;
-pub use thermometer::Thermometer;
+pub use devices::{Device, DeviceInfo, Socket, Thermometer};
+pub use home::{Room, SmartHome};
 pub use types::{Power, Temperature};
 
 #[cfg(test)]

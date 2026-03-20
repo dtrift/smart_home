@@ -1,4 +1,4 @@
-use crate::device::DeviceInfo;
+use super::device::DeviceInfo;
 use crate::types::Temperature;
 
 /// Thermometer for measuring temperature

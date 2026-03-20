@@ -13,11 +13,15 @@ smart_home/
 ├── src/
 │   ├── lib.rs              # Main library file (re-exports)
 │   ├── main.rs             # Usage example
-│   ├── thermometer.rs      # Thermometer
-│   ├── socket.rs           # Socket
-│   ├── device.rs           # Device enumeration, DeviceInfo trait
-│   ├── room.rs             # Room
-│   ├── smart_home.rs       # Smart home
+│   ├── devices/
+│   │   ├── mod.rs          # Re-exports device types
+│   │   ├── device.rs       # Device enum, DeviceInfo trait
+│   │   ├── socket.rs       # Socket
+│   │   └── thermometer.rs  # Thermometer
+│   ├── home/
+│   │   ├── mod.rs          # Re-exports Room, SmartHome
+│   │   ├── room.rs         # Room
+│   │   └── smart_home.rs   # Smart home
 │   └── types/
 │       ├── mod.rs          # Re-exports Power, Temperature
 │       ├── power.rs        # Power (watts)
@@ -26,37 +30,17 @@ smart_home/
 
 ## Modules
 
-### thermometer (Thermometer)
+### devices
 
-- Constructor accepting name and initial temperature
-- Returns current temperature
-- Returns thermometer name
+- **`thermometer`**: constructor, current temperature, name
+- **`socket`**: constructor, on/off, state, power (0 when off)
+- **`device`**: `Device` enum (thermometer or socket), `DeviceInfo` trait,
+  state output
 
-### socket (Socket)
+### home
 
-- Constructor accepting name, on/off state and power
-- Turn on/off methods
-- Ability to check current state
-- Returns current power (0 when off)
-
-### device (Device)
-
-- Enumeration containing thermometer or socket
-- Outputs device state message
-
-### room (Room)
-
-- Constructor accepting name and array of devices
-- Get device reference by index
-- Get mutable device reference by index
-- Output report of all devices in the room
-
-### smart_home (Smart Home)
-
-- Constructor accepting name and array of rooms
-- Get room reference by index
-- Get mutable room reference by index
-- Output report of all rooms
+- **`room`**: constructor, device by index (ref / mut), room report
+- **`smart_home`**: constructor, room by index (ref / mut), home report
 
 ### types (`Power`, `Temperature`)
 
@@ -117,11 +101,11 @@ fn main() {
 Or use full module paths:
 
 ```rust
-use smart_home::smart_home::SmartHome;
-use smart_home::room::Room;
-use smart_home::device::{Device, DeviceInfo};
-use smart_home::socket::Socket;
-use smart_home::thermometer::Thermometer;
+use smart_home::home::smart_home::SmartHome;
+use smart_home::home::room::Room;
+use smart_home::devices::device::{Device, DeviceInfo};
+use smart_home::devices::socket::Socket;
+use smart_home::devices::thermometer::Thermometer;
 use smart_home::types::{Power, Temperature};
 ```
 
@@ -147,8 +131,8 @@ The library contains 10+ unit tests that verify:
 
 ## Implementation Details
 
-- **Modular architecture**: Core types live in `src/*.rs`; `Power` and
-  `Temperature` live under `src/types/`
+- **Modular architecture**: `devices/` and `home/` group domain types;
+  `Power` and `Temperature` live under `src/types/`
 - **Simple and clear names**: `Thermometer`, `Socket`, `Device`, `Room`,
   `SmartHome`, `Power`, `Temperature`
 - **Re-exports**: `lib.rs` re-exports types and the `DeviceInfo` trait for

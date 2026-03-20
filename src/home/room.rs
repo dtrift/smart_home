@@ -1,4 +1,4 @@
-use crate::device::Device;
+use crate::devices::Device;
 
 /// Room containing an array of smart devices
 #[derive(Debug, Clone, PartialEq)]
