@@ -59,6 +59,9 @@ cargo run
 # Run tests
 cargo test
 
+# Build API documentation (rustdoc); use `cargo doc --open` to view in browser
+cargo doc
+
 # Check code
 cargo clippy
 
