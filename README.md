@@ -15,9 +15,13 @@ smart_home/
 │   ├── main.rs             # Usage example
 │   ├── thermometer.rs      # Thermometer
 │   ├── socket.rs           # Socket
-│   ├── device.rs           # Device enumeration
+│   ├── device.rs           # Device enumeration, DeviceInfo trait
 │   ├── room.rs             # Room
-│   └── smart_home.rs       # Smart home
+│   ├── smart_home.rs       # Smart home
+│   └── types/
+│       ├── mod.rs          # Re-exports Power, Temperature
+│       ├── power.rs        # Power (watts)
+│       └── temperature.rs  # Temperature (Celsius)
 ```
 
 ## Modules
@@ -53,6 +57,11 @@ smart_home/
 - Get room reference by index
 - Get mutable room reference by index
 - Output report of all rooms
+
+### types (`Power`, `Temperature`)
+
+- **`Power`**: non-negative power in watts; used by `Socket`
+- **`Temperature`**: Celsius (with Fahrenheit helpers); used by `Thermometer`
 
 ## Running
 
@@ -105,14 +114,15 @@ fn main() {
 }
 ```
 
-Or use full paths:
+Or use full module paths:
 
 ```rust
 use smart_home::smart_home::SmartHome;
 use smart_home::room::Room;
-use smart_home::device::Device;
+use smart_home::device::{Device, DeviceInfo};
 use smart_home::socket::Socket;
 use smart_home::thermometer::Thermometer;
+use smart_home::types::{Power, Temperature};
 ```
 
 ## Usage Example
@@ -137,8 +147,11 @@ The library contains 10+ unit tests that verify:
 
 ## Implementation Details
 
-- **Modular architecture**: Each type is in a separate file for better code organization
-- **Simple and clear names**: `Thermometer`, `Socket`, `Device`, `Room`, `SmartHome`
-- **Re-exports**: All public types are re-exported from `lib.rs` for convenience
+- **Modular architecture**: Core types live in `src/*.rs`; `Power` and
+  `Temperature` live under `src/types/`
+- **Simple and clear names**: `Thermometer`, `Socket`, `Device`, `Room`,
+  `SmartHome`, `Power`, `Temperature`
+- **Re-exports**: `lib.rs` re-exports types and the `DeviceInfo` trait for
+  convenient `use smart_home::...` imports
 - **Panic on error**: When index is out of bounds, panics with a clear message
 - **Documentation**: All public methods are documented with doc comments
