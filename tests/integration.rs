@@ -1,8 +1,6 @@
 //! Integration tests: use only the public `smart_home` API (as a downstream crate would).
 
-use smart_home::{
-    Device, DeviceInfo, Power, Room, SmartHome, Socket, Temperature, Thermometer,
-};
+use smart_home::{Device, DeviceInfo, Power, Room, SmartHome, Socket, Temperature, Thermometer};
 
 #[test]
 fn full_home_workflow() {
