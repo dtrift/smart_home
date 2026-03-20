@@ -26,6 +26,8 @@ smart_home/
 │       ├── mod.rs          # Re-exports Power, Temperature
 │       ├── power.rs        # Power (watts)
 │       └── temperature.rs  # Temperature (Celsius)
+└── tests/
+    └── integration.rs      # Integration tests (public API only)
 ```
 
 ## Modules
@@ -124,13 +126,13 @@ The example in `main.rs` demonstrates:
 
 ## Testing
 
-The library contains 10+ unit tests that verify:
+**Unit tests** live next to the library code (`src/lib.rs` and `src/types/*`).
+They cover thermometer/socket behavior, rooms, smart home accessors, panics,
+`DeviceInfo`, and type helpers.
 
-- Thermometer creation and operation
-- Socket on/off switching
-- Device retrieval by index
-- Panic when index is out of bounds
-- Room and home operations
+**Integration tests** in [`tests/integration.rs`](tests/integration.rs) link
+against the crate as a user would: only the public `smart_home::*` API.
+Run them with `cargo test` or `cargo test --test integration`.
 
 ## Implementation Details
 
