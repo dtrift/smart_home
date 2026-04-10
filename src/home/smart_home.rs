@@ -1,134 +1,119 @@
+use std::collections::HashMap;
+
+use crate::devices::Device;
+use crate::error::SmartHomeError;
+use crate::report::Report;
+
 use super::room::Room;
 
-/// Smart home containing an array of rooms
+/// Smart home: rooms stored in a map keyed by string identifiers.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SmartHome {
     name: String,
-    rooms: Vec<Room>,
+    rooms: HashMap<String, Room>,
 }
 
 impl SmartHome {
-    /// Smart home constructor accepting an array of rooms
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - Home name
-    /// * `rooms` - Array of rooms
+    /// Creates a home with the given name and room map.
     ///
     /// # Examples
     ///
     /// ```
     /// use smart_home::{SmartHome, Room};
+    /// use std::collections::HashMap;
     ///
-    /// let home = SmartHome::new("My Home".to_string(), vec![]);
+    /// let home = SmartHome::new("My Home".to_string(), HashMap::new());
     /// assert_eq!(home.name(), "My Home");
     /// ```
-    pub fn new(name: String, rooms: Vec<Room>) -> Self {
+    pub fn new(name: String, rooms: HashMap<String, Room>) -> Self {
         Self { name, rooms }
     }
 
-    /// Get a reference to the room at the specified index
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - Room index
-    ///
-    /// # Panics
-    ///
-    /// Panics if the index is out of bounds
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use smart_home::{SmartHome, Room};
-    ///
-    /// let rooms = vec![Room::new("Living Room".to_string(), vec![])];
-    /// let home = SmartHome::new("Home".to_string(), rooms);
-    /// let room = home.room(0);
-    /// assert_eq!(room.name(), "Living Room");
-    /// ```
-    pub fn room(&self, index: usize) -> &Room {
-        self.rooms.get(index).expect("Room index out of bounds")
+    /// Room by key, if present.
+    pub fn room(&self, key: &str) -> Option<&Room> {
+        self.rooms.get(key)
     }
 
-    /// Get a mutable reference to the room at the specified index
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - Room index
-    ///
-    /// # Panics
-    ///
-    /// Panics if the index is out of bounds
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use smart_home::{SmartHome, Room, Device, Socket, Power};
-    ///
-    /// let devices = vec![
-    ///     Device::Socket(Socket::new("TV".to_string(), true, Power::new(120.0).unwrap())),
-    /// ];
-    /// let rooms = vec![Room::new("Living Room".to_string(), devices)];
-    /// let mut home = SmartHome::new("Home".to_string(), rooms);
-    /// let room = home.room_mut(0);
-    /// assert_eq!(room.name(), "Living Room");
-    /// ```
-    pub fn room_mut(&mut self, index: usize) -> &mut Room {
-        self.rooms.get_mut(index).expect("Room index out of bounds")
+    /// Mutable room by key, if present.
+    pub fn room_mut(&mut self, key: &str) -> Option<&mut Room> {
+        self.rooms.get_mut(key)
     }
 
-    /// Print a report of all rooms to stdout
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use smart_home::{SmartHome, Room};
-    ///
-    /// let home = SmartHome::new("My Home".to_string(), vec![]);
-    /// home.print_report();
-    /// ```
-    pub fn print_report(&self) {
-        println!("Smart home '{}':", self.name);
-        if self.rooms.is_empty() {
-            println!("  (no rooms)");
-        } else {
-            for room in &self.rooms {
-                room.print_report();
-            }
-        }
-        println!();
+    /// Inserts or replaces a room under `key`. Returns the previous room, if any.
+    pub fn insert_room(&mut self, key: String, room: Room) -> Option<Room> {
+        self.rooms.insert(key, room)
     }
 
-    /// Returns the home name
+    /// Removes a room by key. Returns it if it existed.
+    pub fn remove_room(&mut self, key: &str) -> Option<Room> {
+        self.rooms.remove(key)
+    }
+
+    /// Resolves a device by room key and device key.
     ///
-    /// # Examples
-    ///
-    /// ```
-    /// use smart_home::SmartHome;
-    ///
-    /// let home = SmartHome::new("My Home".to_string(), vec![]);
-    /// assert_eq!(home.name(), "My Home");
-    /// ```
+    /// Returns [`SmartHomeError`] indicating whether the room or the device was missing.
+    pub fn device(&self, room_name: &str, device_name: &str) -> Result<&Device, SmartHomeError> {
+        let room = self
+            .rooms
+            .get(room_name)
+            .ok_or_else(|| SmartHomeError::RoomNotFound {
+                room: room_name.to_string(),
+            })?;
+        room.device(device_name)
+            .ok_or_else(|| SmartHomeError::DeviceNotFound {
+                room: room_name.to_string(),
+                device: device_name.to_string(),
+            })
+    }
+
+    /// Same as [`SmartHome::device`] but mutable.
+    pub fn device_mut(
+        &mut self,
+        room_name: &str,
+        device_name: &str,
+    ) -> Result<&mut Device, SmartHomeError> {
+        let room = self
+            .rooms
+            .get_mut(room_name)
+            .ok_or_else(|| SmartHomeError::RoomNotFound {
+                room: room_name.to_string(),
+            })?;
+        room.device_mut(device_name)
+            .ok_or_else(|| SmartHomeError::DeviceNotFound {
+                room: room_name.to_string(),
+                device: device_name.to_string(),
+            })
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    /// Returns the number of rooms in the home
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use smart_home::{SmartHome, Room};
-    ///
-    /// let rooms = vec![
-    ///     Room::new("Kitchen".to_string(), vec![]),
-    ///     Room::new("Living Room".to_string(), vec![]),
-    /// ];
-    /// let home = SmartHome::new("Home".to_string(), rooms);
-    /// assert_eq!(home.room_count(), 2);
-    /// ```
     pub fn room_count(&self) -> usize {
         self.rooms.len()
+    }
+
+    /// Iterator over `(key, room)` pairs (arbitrary order).
+    pub fn rooms(&self) -> impl Iterator<Item = (&String, &Room)> {
+        self.rooms.iter()
+    }
+}
+
+impl Report for SmartHome {
+    fn report(&self) -> String {
+        let mut lines = vec![format!("Smart home '{}':\n", self.name)];
+        if self.rooms.is_empty() {
+            lines.push("  (no rooms)\n".to_string());
+        } else {
+            let mut keys: Vec<&String> = self.rooms.keys().collect();
+            keys.sort();
+            for k in keys {
+                if let Some(room) = self.rooms.get(k.as_str()) {
+                    lines.push(room.report());
+                }
+            }
+        }
+        lines.push('\n'.to_string());
+        lines.concat()
     }
 }
