@@ -7,6 +7,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use super::device::DeviceInfo;
+use crate::report::Report;
 use crate::types::Temperature;
 use crate::wire;
 
@@ -166,6 +167,12 @@ impl Clone for Thermometer {
     }
 }
 
+impl Default for Thermometer {
+    fn default() -> Self {
+        Self::new("Thermometer".to_string(), Temperature::default())
+    }
+}
+
 impl PartialEq for Thermometer {
     fn eq(&self, other: &Self) -> bool {
         if self.name != other.name {
@@ -205,6 +212,12 @@ impl DeviceInfo for Thermometer {
             self.name,
             self.temperature().as_celsius()
         )
+    }
+}
+
+impl Report for Thermometer {
+    fn report(&self) -> String {
+        format!("{}\n", self.state())
     }
 }
 

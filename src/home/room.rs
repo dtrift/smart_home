@@ -1,13 +1,28 @@
 use std::collections::HashMap;
+use std::fmt;
 
 use crate::devices::Device;
 use crate::report::Report;
 
+/// Observer for device additions in a [`Room`].
+pub trait Subscriber {
+    fn on_event(&mut self, device: &Device);
+}
+
+impl<F> Subscriber for F
+where
+    F: FnMut(&Device),
+{
+    fn on_event(&mut self, device: &Device) {
+        self(device);
+    }
+}
+
 /// Room containing smart devices keyed by string identifiers.
-#[derive(Debug, Clone, PartialEq)]
 pub struct Room {
     name: String,
     devices: HashMap<String, Device>,
+    subscribers: Vec<Box<dyn Subscriber>>,
 }
 
 impl Room {
@@ -28,7 +43,11 @@ impl Room {
     /// assert_eq!(room.name(), "Living Room");
     /// ```
     pub fn new(name: String, devices: HashMap<String, Device>) -> Self {
-        Self { name, devices }
+        Self {
+            name,
+            devices,
+            subscribers: Vec::new(),
+        }
     }
 
     /// Reference to a device by key, if present.
@@ -43,6 +62,7 @@ impl Room {
 
     /// Inserts or replaces a device under `key`. Returns the previous device, if any.
     pub fn insert_device(&mut self, key: String, device: Device) -> Option<Device> {
+        self.notify_subscribers(&device);
         self.devices.insert(key, device)
     }
 
@@ -64,6 +84,52 @@ impl Room {
     /// Iterator over `(key, device)` pairs (arbitrary order).
     pub fn devices(&self) -> impl Iterator<Item = (&String, &Device)> {
         self.devices.iter()
+    }
+
+    /// Subscribes to device-addition events for this room.
+    pub fn subscribe<S>(&mut self, subscriber: S)
+    where
+        S: Subscriber + 'static,
+    {
+        self.subscribers.push(Box::new(subscriber));
+    }
+
+    fn notify_subscribers(&mut self, device: &Device) {
+        for subscriber in &mut self.subscribers {
+            subscriber.on_event(device);
+        }
+    }
+}
+
+impl Default for Room {
+    fn default() -> Self {
+        Self::new("Room".to_string(), HashMap::new())
+    }
+}
+
+impl Clone for Room {
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            devices: self.devices.clone(),
+            subscribers: Vec::new(),
+        }
+    }
+}
+
+impl PartialEq for Room {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name && self.devices == other.devices
+    }
+}
+
+impl fmt::Debug for Room {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Room")
+            .field("name", &self.name)
+            .field("devices", &self.devices)
+            .field("subscriber_count", &self.subscribers.len())
+            .finish()
     }
 }
 

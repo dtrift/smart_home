@@ -99,6 +99,12 @@ impl SmartHome {
     }
 }
 
+impl Default for SmartHome {
+    fn default() -> Self {
+        Self::new("Smart Home".to_string(), HashMap::new())
+    }
+}
+
 impl Report for SmartHome {
     fn report(&self) -> String {
         let mut lines = vec![format!("Smart home '{}':\n", self.name)];

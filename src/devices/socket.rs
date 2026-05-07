@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use std::sync::Mutex;
 
 use super::device::DeviceInfo;
+use crate::report::Report;
 use crate::types::Power;
 use crate::wire;
 
@@ -195,6 +196,12 @@ impl Clone for Socket {
     }
 }
 
+impl Default for Socket {
+    fn default() -> Self {
+        Self::new("Socket".to_string(), false, Power::default())
+    }
+}
+
 impl PartialEq for Socket {
     fn eq(&self, other: &Self) -> bool {
         if self.name != other.name {
@@ -251,6 +258,12 @@ impl DeviceInfo for Socket {
             Some(e) => format!("{base} [error: {e}]"),
             None => base,
         }
+    }
+}
+
+impl Report for Socket {
+    fn report(&self) -> String {
+        format!("{}\n", self.state())
     }
 }
 
