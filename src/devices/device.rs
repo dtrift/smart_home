@@ -1,5 +1,6 @@
 use super::socket::Socket;
 use super::thermometer::Thermometer;
+use crate::report::Report;
 
 /// Trait for all smart home devices
 pub trait DeviceInfo {
@@ -64,5 +65,23 @@ impl DeviceInfo for Device {
             Device::Thermometer(t) => t.state(),
             Device::Socket(s) => s.state(),
         }
+    }
+}
+
+impl From<Thermometer> for Device {
+    fn from(value: Thermometer) -> Self {
+        Device::Thermometer(value)
+    }
+}
+
+impl From<Socket> for Device {
+    fn from(value: Socket) -> Self {
+        Device::Socket(value)
+    }
+}
+
+impl Report for Device {
+    fn report(&self) -> String {
+        format!("{}\n", DeviceInfo::state(self))
     }
 }

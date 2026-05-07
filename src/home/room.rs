@@ -1,145 +1,86 @@
-use crate::devices::Device;
+use std::collections::HashMap;
 
-/// Room containing an array of smart devices
+use crate::devices::Device;
+use crate::report::Report;
+
+/// Room containing smart devices keyed by string identifiers.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Room {
     name: String,
-    devices: Vec<Device>,
+    devices: HashMap<String, Device>,
 }
 
 impl Room {
-    /// Room constructor accepting an array of devices
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - Room name
-    /// * `devices` - Array of devices in the room
+    /// Creates a room with the given display name and device map.
     ///
     /// # Examples
     ///
     /// ```
     /// use smart_home::{Room, Device, Thermometer, Temperature};
+    /// use std::collections::HashMap;
     ///
-    /// let devices = vec![
+    /// let mut map = HashMap::new();
+    /// map.insert(
+    ///     "t1".to_string(),
     ///     Device::Thermometer(Thermometer::new("Thermometer".to_string(), Temperature::celsius(22.0))),
-    /// ];
-    /// let room = Room::new("Living Room".to_string(), devices);
+    /// );
+    /// let room = Room::new("Living Room".to_string(), map);
     /// assert_eq!(room.name(), "Living Room");
     /// ```
-    pub fn new(name: String, devices: Vec<Device>) -> Self {
+    pub fn new(name: String, devices: HashMap<String, Device>) -> Self {
         Self { name, devices }
     }
 
-    /// Get a reference to the device at the specified index
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - Device index
-    ///
-    /// # Panics
-    ///
-    /// Panics if the index is out of bounds
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use smart_home::{Room, Device, Socket, Power, DeviceInfo};
-    ///
-    /// let devices = vec![
-    ///     Device::Socket(Socket::new("TV".to_string(), true, Power::new(120.0).unwrap())),
-    /// ];
-    /// let room = Room::new("Living Room".to_string(), devices);
-    /// let device = room.device(0);
-    /// assert_eq!(device.name(), "TV");
-    /// ```
-    pub fn device(&self, index: usize) -> &Device {
-        self.devices.get(index).expect("Device index out of bounds")
+    /// Reference to a device by key, if present.
+    pub fn device(&self, key: &str) -> Option<&Device> {
+        self.devices.get(key)
     }
 
-    /// Get a mutable reference to the device at the specified index
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - Device index
-    ///
-    /// # Panics
-    ///
-    /// Panics if the index is out of bounds
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use smart_home::{Room, Device, Socket, Power};
-    ///
-    /// let devices = vec![
-    ///     Device::Socket(Socket::new("Lamp".to_string(), false, Power::new(60.0).unwrap())),
-    /// ];
-    /// let mut room = Room::new("Bedroom".to_string(), devices);
-    /// let device = room.device_mut(0);
-    /// if let Device::Socket(socket) = device {
-    ///     socket.turn_on();
-    /// }
-    /// ```
-    pub fn device_mut(&mut self, index: usize) -> &mut Device {
-        self.devices
-            .get_mut(index)
-            .expect("Device index out of bounds")
+    /// Mutable reference to a device by key, if present.
+    pub fn device_mut(&mut self, key: &str) -> Option<&mut Device> {
+        self.devices.get_mut(key)
     }
 
-    /// Print a report of all devices in the room to stdout
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use smart_home::{Room, Device, Thermometer, Temperature};
-    ///
-    /// let devices = vec![
-    ///     Device::Thermometer(Thermometer::new("Sensor".to_string(), Temperature::celsius(20.0))),
-    /// ];
-    /// let room = Room::new("Kitchen".to_string(), devices);
-    /// room.print_report();
-    /// ```
-    pub fn print_report(&self) {
-        println!("  Room '{}':", self.name);
-        if self.devices.is_empty() {
-            println!("    (no devices)");
-        } else {
-            for device in &self.devices {
-                print!("    ");
-                device.print_state();
-            }
-        }
+    /// Inserts or replaces a device under `key`. Returns the previous device, if any.
+    pub fn insert_device(&mut self, key: String, device: Device) -> Option<Device> {
+        self.devices.insert(key, device)
     }
 
-    /// Returns the room name
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use smart_home::Room;
-    ///
-    /// let room = Room::new("Kitchen".to_string(), vec![]);
-    /// assert_eq!(room.name(), "Kitchen");
-    /// ```
+    /// Removes a device by key. Returns it if it existed.
+    pub fn remove_device(&mut self, key: &str) -> Option<Device> {
+        self.devices.remove(key)
+    }
+
+    /// Room display name.
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    /// Returns the number of devices in the room
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use smart_home::{Room, Device, Socket, Power};
-    ///
-    /// let devices = vec![
-    ///     Device::Socket(Socket::new("S1".to_string(), true, Power::new(100.0).unwrap())),
-    ///     Device::Socket(Socket::new("S2".to_string(), false, Power::new(50.0).unwrap())),
-    /// ];
-    /// let room = Room::new("Kitchen".to_string(), devices);
-    /// assert_eq!(room.device_count(), 2);
-    /// ```
+    /// Number of devices in the room.
     pub fn device_count(&self) -> usize {
         self.devices.len()
+    }
+
+    /// Iterator over `(key, device)` pairs (arbitrary order).
+    pub fn devices(&self) -> impl Iterator<Item = (&String, &Device)> {
+        self.devices.iter()
+    }
+}
+
+impl Report for Room {
+    fn report(&self) -> String {
+        let mut lines = vec![format!("  Room '{}':\n", self.name)];
+        if self.devices.is_empty() {
+            lines.push("    (no devices)\n".to_string());
+        } else {
+            let mut keys: Vec<&String> = self.devices.keys().collect();
+            keys.sort();
+            for k in keys {
+                if let Some(d) = self.devices.get(k.as_str()) {
+                    lines.push(format!("    {}", d.report()));
+                }
+            }
+        }
+        lines.concat()
     }
 }
