@@ -1,4 +1,4 @@
-//! TCP smart-outlet simulator: non-blocking accept/read, shared state, many clients.
+//! TCP smart-outlet simulator: non-blocking accept/read, length-prefixed frames, shared state, many clients.
 //!
 //! Usage: `socket_sim <BIND_ADDR> [--watts <W>] [--on|--off]`
 
@@ -37,11 +37,11 @@ impl Client {
         })
     }
 
-    fn push_response(&mut self, line: &str) {
-        self.out.extend_from_slice(line.as_bytes());
-        if !line.ends_with('\n') {
-            self.out.push(b'\n');
-        }
+    fn push_response(&mut self, payload: &str) {
+        let bytes = payload.as_bytes();
+        let len = u32::try_from(bytes.len()).expect("socket_sim response frame is too large");
+        self.out.extend_from_slice(&len.to_be_bytes());
+        self.out.extend_from_slice(bytes);
     }
 
     fn flush_writes(&mut self) -> io::Result<()> {
@@ -78,18 +78,32 @@ impl Client {
         Ok(())
     }
 
-    fn drain_lines(&mut self, state: &Arc<Mutex<OutletState>>) -> io::Result<()> {
-        while let Some(pos) = self.buf.iter().position(|&b| b == b'\n') {
-            let raw: Vec<u8> = self.buf.drain(..=pos).collect();
-            let line = String::from_utf8_lossy(&raw[..raw.len().saturating_sub(1)]);
-            let line = line.trim();
-            match line {
+    fn drain_frames(&mut self, state: &Arc<Mutex<OutletState>>) -> io::Result<()> {
+        while self.buf.len() >= 4 {
+            let len =
+                u32::from_be_bytes(self.buf[..4].try_into().expect("length prefix is 4 bytes"))
+                    as usize;
+            if len > 1024 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("frame is too large: {len} bytes"),
+                ));
+            }
+            if self.buf.len() < 4 + len {
+                break;
+            }
+            self.buf.drain(..4);
+            let raw: Vec<u8> = self.buf.drain(..len).collect();
+            let command = String::from_utf8(raw).map_err(|e| {
+                io::Error::new(io::ErrorKind::InvalidData, format!("bad UTF-8: {e}"))
+            })?;
+            match command.as_str() {
                 "GET_STATUS" => {
                     let g = state
                         .lock()
                         .map_err(|_| io::Error::other("state mutex poisoned"))?;
                     let msg = wire::format_status_line(g.is_on, g.watts_now());
-                    self.push_response(msg.trim_end());
+                    self.push_response(&msg);
                 }
                 "SET_ON" => {
                     if let Ok(mut g) = state.lock() {
@@ -172,7 +186,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let c = &mut clients[i];
                 match c.read_available() {
                     Err(_) => true,
-                    Ok(()) => c.drain_lines(&state).is_err() || c.flush_writes().is_err(),
+                    Ok(()) => c.drain_frames(&state).is_err() || c.flush_writes().is_err(),
                 }
             };
             if remove {

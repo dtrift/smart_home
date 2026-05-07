@@ -1,4 +1,4 @@
-//! Line-oriented TCP commands for smart sockets and UDP payload for thermometers.
+//! Length-prefixed TCP commands for smart sockets and UDP payload for thermometers.
 
 use crate::types::Temperature;
 use std::io::{self, Read, Write};
@@ -7,6 +7,7 @@ use std::time::Duration;
 
 /// Default timeout for synchronous TCP operations from library code.
 pub const TCP_TIMEOUT: Duration = Duration::from_secs(2);
+const TCP_MAX_FRAME_LEN: usize = 1024;
 
 pub fn tcp_connect(addr: impl ToSocketAddrs) -> io::Result<TcpStream> {
     let stream = TcpStream::connect_timeout(
@@ -21,54 +22,57 @@ pub fn tcp_connect(addr: impl ToSocketAddrs) -> io::Result<TcpStream> {
     Ok(stream)
 }
 
-pub fn read_line(stream: &mut TcpStream) -> io::Result<String> {
-    let mut buf = Vec::new();
-    let mut byte = [0_u8; 1];
-    loop {
-        let n = stream.read(&mut byte)?;
-        if n == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "connection closed before newline",
-            ));
-        }
-        if byte[0] == b'\n' {
-            break;
-        }
-        buf.push(byte[0]);
+pub fn read_frame(stream: &mut TcpStream) -> io::Result<String> {
+    let mut len_buf = [0_u8; 4];
+    stream.read_exact(&mut len_buf)?;
+    let len = u32::from_be_bytes(len_buf) as usize;
+    if len > TCP_MAX_FRAME_LEN {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("TCP frame is too large: {len} bytes"),
+        ));
     }
+    let mut buf = vec![0_u8; len];
+    stream.read_exact(&mut buf)?;
     String::from_utf8(buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
-pub fn write_line(stream: &mut TcpStream, line: &[u8]) -> io::Result<()> {
-    stream.write_all(line)?;
-    if !line.ends_with(b"\n") {
-        stream.write_all(b"\n")?;
+pub fn write_frame(stream: &mut TcpStream, payload: &[u8]) -> io::Result<()> {
+    if payload.len() > TCP_MAX_FRAME_LEN {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("TCP frame is too large: {} bytes", payload.len()),
+        ));
     }
+    let len = u32::try_from(payload.len())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?
+        .to_be_bytes();
+    stream.write_all(&len)?;
+    stream.write_all(payload)?;
     stream.flush()
 }
 
 pub fn socket_get_status(addr: SocketAddr) -> io::Result<(bool, f32)> {
     let mut stream = tcp_connect(addr)?;
-    write_line(&mut stream, b"GET_STATUS")?;
-    let line = read_line(&mut stream)?;
+    write_frame(&mut stream, b"GET_STATUS")?;
+    let line = read_frame(&mut stream)?;
     parse_status_line(&line)
 }
 
 pub fn socket_set_on(addr: SocketAddr) -> io::Result<()> {
     let mut stream = tcp_connect(addr)?;
-    write_line(&mut stream, b"SET_ON")?;
+    write_frame(&mut stream, b"SET_ON")?;
     expect_ok(&mut stream)
 }
 
 pub fn socket_set_off(addr: SocketAddr) -> io::Result<()> {
     let mut stream = tcp_connect(addr)?;
-    write_line(&mut stream, b"SET_OFF")?;
+    write_frame(&mut stream, b"SET_OFF")?;
     expect_ok(&mut stream)
 }
 
 fn expect_ok(stream: &mut TcpStream) -> io::Result<()> {
-    let line = read_line(stream)?;
+    let line = read_frame(stream)?;
     if line.trim() == "OK" {
         Ok(())
     } else {
@@ -108,7 +112,7 @@ fn parse_status_line(line: &str) -> io::Result<(bool, f32)> {
 
 pub fn format_status_line(is_on: bool, watts: f32) -> String {
     let flag = if is_on { "1" } else { "0" };
-    format!("STATUS,{flag},{watts}\n")
+    format!("STATUS,{flag},{watts}")
 }
 
 /// UDP payload: 4-byte little-endian IEEE754 `f32` (degrees Celsius).
@@ -140,6 +144,22 @@ mod tests {
         let (on2, w2) = parse_status_line(line.trim_end()).unwrap();
         assert!(on2);
         assert!((w2 - 123.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn tcp_frame_roundtrip() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let payload = read_frame(&mut stream).unwrap();
+            assert_eq!(payload, "PING");
+            write_frame(&mut stream, b"PONG").unwrap();
+        });
+
+        let mut stream = tcp_connect(addr).unwrap();
+        write_frame(&mut stream, b"PING").unwrap();
+        assert_eq!(read_frame(&mut stream).unwrap(), "PONG");
     }
 
     #[test]

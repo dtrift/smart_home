@@ -269,7 +269,6 @@ impl Report for Socket {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::mpsc;
     use std::thread;
@@ -296,29 +295,18 @@ mod tests {
                         stream
                             .set_write_timeout(Some(Duration::from_secs(2)))
                             .unwrap();
-                        let mut line = String::new();
-                        let mut buf = [0_u8; 1];
-                        while let Ok(n) = stream.read(&mut buf) {
-                            if n == 0 {
-                                break;
-                            }
-                            if buf[0] == b'\n' {
-                                let l = line.trim();
-                                if l == "GET_STATUS" {
-                                    let on = *flag2.lock().unwrap();
-                                    let w = if on { 99.0 } else { 0.0 };
-                                    let msg = wire::format_status_line(on, w);
-                                    let _ = stream.write_all(msg.as_bytes());
-                                } else if l == "SET_ON" {
-                                    *flag2.lock().unwrap() = true;
-                                    let _ = stream.write_all(b"OK\n");
-                                } else if l == "SET_OFF" {
-                                    *flag2.lock().unwrap() = false;
-                                    let _ = stream.write_all(b"OK\n");
-                                }
-                                line.clear();
-                            } else {
-                                line.push(buf[0] as char);
+                        while let Ok(command) = wire::read_frame(&mut stream) {
+                            if command == "GET_STATUS" {
+                                let on = *flag2.lock().unwrap();
+                                let w = if on { 99.0 } else { 0.0 };
+                                let msg = wire::format_status_line(on, w);
+                                let _ = wire::write_frame(&mut stream, msg.as_bytes());
+                            } else if command == "SET_ON" {
+                                *flag2.lock().unwrap() = true;
+                                let _ = wire::write_frame(&mut stream, b"OK");
+                            } else if command == "SET_OFF" {
+                                *flag2.lock().unwrap() = false;
+                                let _ = wire::write_frame(&mut stream, b"OK");
                             }
                         }
                     }
