@@ -7,6 +7,7 @@
 //! - [`types`] — [`Power`], [`Temperature`]
 //! - [`report`] — [`Report`]
 //! - [`error`] — [`SmartHomeError`]
+//! - [`wire`] — TCP/UDP framing helpers shared with `socket_sim` / `thermo_sim`
 //!
 //! Types are re-exported at the crate root.
 //!
@@ -33,6 +34,7 @@ pub mod error;
 pub mod home;
 pub mod report;
 pub mod types;
+pub mod wire;
 
 pub use devices::{Device, DeviceInfo, Socket, Thermometer};
 pub use error::SmartHomeError;
