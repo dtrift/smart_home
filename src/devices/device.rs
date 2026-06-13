@@ -80,6 +80,12 @@ impl From<Socket> for Device {
     }
 }
 
+impl Default for Device {
+    fn default() -> Self {
+        Device::Socket(Socket::default())
+    }
+}
+
 impl Report for Device {
     fn report(&self) -> String {
         format!("{}\n", DeviceInfo::state(self))

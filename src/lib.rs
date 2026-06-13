@@ -38,8 +38,8 @@ pub mod wire;
 
 pub use devices::{Device, DeviceInfo, Socket, Thermometer};
 pub use error::SmartHomeError;
-pub use home::{Room, SmartHome};
-pub use report::Report;
+pub use home::{HomeBuilder, NoRoom, Room, SmartHome, Subscriber, WithRoom};
+pub use report::{Report, Reporter};
 pub use types::{Power, Temperature};
 
 /// Prints a report for any type implementing [`Report`].
