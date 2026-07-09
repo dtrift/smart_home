@@ -1,0 +1,13 @@
+[package]
+name = "smart_socket_ffi"
+version = "0.1.0"
+edition = "2024"
+description = "Smart socket with a C ABI (rlib + staticlib + cdylib)"
+
+[lib]
+name = "smart_socket_ffi"
+# Three artifacts, as required by the homework:
+#   rlib       — Rust static archive, used by Rust consumers (app_static)
+#   staticlib  — C-compatible static archive (.a), linkable from C/C++
+#   cdylib     — C-compatible dynamic library (.so/.dylib/.dll), loadable at runtime
+crate-type = ["rlib", "staticlib", "cdylib"]

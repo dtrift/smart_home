@@ -1,0 +1,8 @@
+[package]
+name = "app_dynamic"
+version = "0.1.0"
+edition = "2024"
+description = "Demonstrates runtime dynamic linking of the smart_socket_ffi cdylib"
+
+[dependencies]
+libloading = "0.8"

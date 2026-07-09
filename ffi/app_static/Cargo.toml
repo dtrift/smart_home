@@ -1,0 +1,11 @@
+[package]
+name = "app_static"
+version = "0.1.0"
+edition = "2024"
+description = "Demonstrates static linking of the smart_socket_ffi library (rlib)"
+
+[dependencies]
+# Path dependency: Cargo links the crate statically via its `rlib` artifact.
+# `smart_socket_ffi` also builds `staticlib` (.a) and `cdylib` (.so) as side
+# effects of the multi crate-type configuration.
+smart_socket_ffi = { path = "../smart_socket_ffi" }
