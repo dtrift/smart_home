@@ -21,6 +21,16 @@
 
 use std::os::raw::c_char;
 
+/// Cookie stored as the first field of every live socket.
+///
+/// Each FFI entry point checks it to reject foreign, corrupted, or
+/// already-freed handles. This is a best-effort defence: it cannot protect
+/// against completely arbitrary pointers (reading unmapped memory still
+/// segfaults), but it catches the common misuse cases — wrong type, zeroed
+/// allocation, or a handle whose cookie was stamped out by
+/// [`smart_socket_free`].
+const COOKIE: u32 = 0x5353_4F4B; // "SSOK" (Smart SOKet)
+
 /// Smart socket: on/off switch with a rated power consumption.
 ///
 /// The layout is `#[repr(C)]` so it has a stable binary representation, but the
@@ -28,6 +38,7 @@ use std::os::raw::c_char;
 /// (`typedef struct SmartSocket SmartSocket;`).
 #[repr(C)]
 pub struct SmartSocket {
+    cookie: u32,
     is_on: bool,
     power_watts: f32,
 }
@@ -40,7 +51,11 @@ impl SmartSocket {
         if power_watts.is_nan() || power_watts < 0.0 {
             return None;
         }
-        Some(Self { is_on, power_watts })
+        Some(Self {
+            cookie: COOKIE,
+            is_on,
+            power_watts,
+        })
     }
 
     fn turn_on(&mut self) {
@@ -89,19 +104,32 @@ pub extern "C" fn smart_socket_new(is_on: bool, power_watts: f32) -> *mut SmartS
 
 /// Frees a smart socket previously created with [`smart_socket_new`].
 ///
-/// No-op if `ptr` is null. Passing a pointer not returned by [`smart_socket_new`],
-/// or freeing the same pointer twice, is undefined behaviour.
+/// No-op if `ptr` is null or does not point to a live socket (the cookie is
+/// checked). After freeing, the cookie is stamped out so a subsequent call
+/// with the same pointer is rejected as well — a best-effort defence against
+/// double-free.
 ///
 /// # Safety
 ///
-/// `ptr` must be either null or a valid pointer returned by [`smart_socket_new`]
-/// that has not yet been freed.
+/// `ptr` must be null or a dereferenceable pointer. For full soundness it
+/// should be a valid pointer returned by [`smart_socket_new`] that has not yet
+/// been freed; the cookie check only guards against *readable* invalid memory.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn smart_socket_free(ptr: *mut SmartSocket) {
-    if !ptr.is_null() {
-        // SAFETY: caller guarantees `ptr` came from `Box::into_raw` and is used once.
-        unsafe { drop(Box::from_raw(ptr)) };
+    if ptr.is_null() {
+        return;
     }
+    // Reject foreign/corrupted handles whose cookie does not match.
+    // SAFETY: caller guarantees `ptr` is null (checked) or dereferenceable.
+    if unsafe { (*ptr).cookie } != COOKIE {
+        return;
+    }
+    // Stamp out the cookie so a later erroneous call is rejected instead of
+    // double-freeing. Best-effort: reading freed memory is UB regardless.
+    // SAFETY: same guarantee as above; write happens before deallocation.
+    unsafe { (*ptr).cookie = 0 };
+    // SAFETY: `ptr` was produced by `Box::into_raw` in `smart_socket_new`.
+    unsafe { drop(Box::from_raw(ptr)) };
 }
 
 /// Turns the socket on. No-op if `ptr` is null.
@@ -180,33 +208,40 @@ pub extern "C" fn smart_socket_version() -> *const c_char {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/// Converts a const pointer into a borrowed reference, or `None` if null.
+/// Converts a const pointer into a borrowed reference, or `None` if the
+/// pointer is null or does not carry the cookie.
 ///
 /// # Safety
 ///
-/// Caller guarantees `ptr` is null or points to a valid, non-freed `SmartSocket`.
+/// Caller guarantees `ptr` is null or points to dereferenceable memory.
 unsafe fn as_ref<'a>(ptr: *const SmartSocket) -> Option<&'a SmartSocket> {
     if ptr.is_null() {
-        None
-    } else {
-        // SAFETY: caller guarantees the pointer is valid and non-freed.
-        Some(unsafe { &*ptr })
+        return None;
     }
+    // SAFETY: caller guarantees the pointer is null (checked) or dereferenceable.
+    let socket = unsafe { &*ptr };
+    if socket.cookie != COOKIE {
+        return None;
+    }
+    Some(socket)
 }
 
-/// Converts a mut pointer into a mutably borrowed reference, or `None` if null.
+/// Converts a mut pointer into a mutably borrowed reference, or `None` if the
+/// pointer is null or does not carry the cookie.
 ///
 /// # Safety
 ///
-/// Caller guarantees `ptr` is null or points to a valid, non-freed, uniquely
-/// owned `SmartSocket`.
+/// Caller guarantees `ptr` is null or points to dereferenceable memory.
 unsafe fn as_mut<'a>(ptr: *mut SmartSocket) -> Option<&'a mut SmartSocket> {
     if ptr.is_null() {
-        None
-    } else {
-        // SAFETY: caller guarantees the pointer is valid, non-freed, and unique.
-        Some(unsafe { &mut *ptr })
+        return None;
     }
+    // SAFETY: caller guarantees the pointer is null (checked) or dereferenceable.
+    let socket = unsafe { &mut *ptr };
+    if socket.cookie != COOKIE {
+        return None;
+    }
+    Some(socket)
 }
 
 #[cfg(test)]
@@ -268,6 +303,34 @@ mod tests {
             assert!(!smart_socket_is_on(std::ptr::null()));
             assert_eq!(smart_socket_power(std::ptr::null()), 0.0);
             assert_eq!(smart_socket_rated_power(std::ptr::null()), 0.0);
+        }
+    }
+
+    #[test]
+    fn invalid_handle_is_rejected() {
+        let ptr = socket(true, 100.0);
+
+        // Corrupt the cookie to simulate a foreign / corrupted / freed handle.
+        // SAFETY: `ptr` is a valid, live handle; we overwrite only the cookie field.
+        unsafe { (*ptr).cookie = 0 };
+
+        // SAFETY: the memory is still readable, but the signature no longer matches,
+        // so every entry point must treat the handle as invalid (no-op / default).
+        unsafe {
+            smart_socket_turn_on(ptr);
+            smart_socket_turn_off(ptr);
+            assert!(!smart_socket_is_on(ptr));
+            assert_eq!(smart_socket_power(ptr), 0.0);
+            assert_eq!(smart_socket_rated_power(ptr), 0.0);
+            // free must refuse to deallocate foreign/corrupted memory.
+            smart_socket_free(ptr);
+        }
+
+        // Restore the cookie and free for real to avoid leaking the allocation.
+        // SAFETY: memory was not freed above (cookie mismatch); we make it valid again.
+        unsafe {
+            (*ptr).cookie = COOKIE;
+            smart_socket_free(ptr);
         }
     }
 
