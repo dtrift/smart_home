@@ -137,6 +137,77 @@ They cover thermometer/socket behavior, rooms, smart home accessors, panics,
 against the crate as a user would: only the public `smart_home::*` API.
 Run them with `cargo test` or `cargo test --test integration`.
 
+## FFI Workspace (C ABI smart socket)
+
+The repository is a Cargo workspace. Besides the `smart_home` library, it
+contains an FFI sub-project under [`ffi/`](ffi) that exposes a smart socket
+through a C ABI and demonstrates the two linking strategies.
+
+```text
+ffi/
+├── smart_socket_ffi/     # C ABI library
+│   ├── Cargo.toml        # crate-type = ["rlib", "staticlib", "cdylib"]
+│   ├── src/lib.rs        # SmartSocket + #[no_mangle] extern "C" functions
+│   └── smart_socket.h    # C header for the same API
+├── app_static/           # links the library statically (rlib)
+│   └── src/main.rs
+└── app_dynamic/          # loads the cdylib at runtime (libloading)
+    └── src/main.rs
+```
+
+### Library: `smart_socket_ffi`
+
+A smart socket with an on/off switch and a rated power (watts). When off, the
+reported power is `0`; when on, it equals the rated power.
+
+The crate produces **three build artifacts** (see `crate-type` in
+[`ffi/smart_socket_ffi/Cargo.toml`](ffi/smart_socket_ffi/Cargo.toml)):
+
+| Artifact    | File                                         | Used by                                 |
+|-------------|----------------------------------------------|-----------------------------------------|
+| `rlib`      | `libsmart_socket_ffi.rlib`                   | Rust consumers (`app_static`)           |
+| `staticlib` | `libsmart_socket_ffi.a`                      | C/C++ static linking                    |
+| `cdylib`    | `libsmart_socket_ffi.so` / `.dylib` / `.dll` | Runtime dynamic loading (`app_dynamic`) |
+
+C ABI (see [`ffi/smart_socket_ffi/smart_socket.h`](ffi/smart_socket_ffi/smart_socket.h)):
+
+```c
+SmartSocket *smart_socket_new(bool is_on, float power_watts);
+void         smart_socket_free(SmartSocket *ptr);
+void         smart_socket_turn_on(SmartSocket *ptr);
+void         smart_socket_turn_off(SmartSocket *ptr);
+bool         smart_socket_is_on(const SmartSocket *ptr);
+float        smart_socket_power(const SmartSocket *ptr);
+float        smart_socket_rated_power(const SmartSocket *ptr);
+const char  *smart_socket_version(void);
+```
+
+### Static linking: `app_static`
+
+Depends on `smart_socket_ffi` as a Cargo path dependency. The `rlib` artifact
+is linked into the binary at compile time — the library code lives inside the
+executable, with no runtime dependency on a shared object.
+
+### Dynamic linking: `app_dynamic`
+
+Does **not** link `smart_socket_ffi` at compile time. Instead it uses
+[`libloading`](https://crates.io/crates/libloading) to load the `cdylib`
+artifact (`libsmart_socket_ffi.so`) at startup and resolves the C ABI symbols
+through function pointers — the Rust equivalent of C's `dlopen`/`dlsym`.
+
+### Running the FFI examples
+
+```bash
+# Build everything (library + both apps + all artifacts)
+cargo build --workspace
+
+# Run the statically-linked app
+cargo run -p app_static
+
+# Run the dynamically-linked app (loads the cdylib at runtime)
+cargo run -p app_dynamic
+```
+
 ## Implementation Details
 
 - **Modular architecture**: `devices/` and `home/` group domain types;
