@@ -5,13 +5,17 @@ use crate::devices::Device;
 use crate::report::Report;
 
 /// Observer for device additions in a [`Room`].
-pub trait Subscriber {
+///
+/// Implementations must be [`Send`] + [`Sync`] so that a [`Room`] (and hence a
+/// [`crate::SmartHome`]) can be shared across threads — required, for example,
+/// to host the home behind an async web server.
+pub trait Subscriber: Send + Sync {
     fn on_event(&mut self, device: &Device);
 }
 
 impl<F> Subscriber for F
 where
-    F: FnMut(&Device),
+    F: FnMut(&Device) + Send + Sync,
 {
     fn on_event(&mut self, device: &Device) {
         self(device);

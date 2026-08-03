@@ -8,6 +8,7 @@ edition = "2024"
 [workspace]
 resolver = "2"
 members = [
+    "backend",
     "ffi/smart_socket_ffi",
     "ffi/app_static",
     "ffi/app_dynamic",

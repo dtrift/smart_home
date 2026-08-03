@@ -1,5 +1,4 @@
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use smart_home::{
     Device, DeviceInfo, HomeBuilder, Reporter, Room, Socket, Subscriber, Temperature, Thermometer,
@@ -7,18 +6,18 @@ use smart_home::{
 
 #[derive(Default)]
 struct MySubscriber {
-    added: Rc<RefCell<Vec<String>>>,
+    added: Arc<Mutex<Vec<String>>>,
 }
 
 impl MySubscriber {
-    fn with_log(added: Rc<RefCell<Vec<String>>>) -> Self {
+    fn with_log(added: Arc<Mutex<Vec<String>>>) -> Self {
         Self { added }
     }
 }
 
 impl Subscriber for MySubscriber {
     fn on_event(&mut self, device: &Device) {
-        self.added.borrow_mut().push(device.name().to_string());
+        self.added.lock().unwrap().push(device.name().to_string());
     }
 }
 
@@ -40,14 +39,15 @@ fn main() {
     Reporter::new().add(&home).report();
 
     let mut room = Room::default();
-    let subscriber_log = Rc::new(RefCell::new(Vec::new()));
-    room.subscribe(MySubscriber::with_log(Rc::clone(&subscriber_log)));
+    let subscriber_log = Arc::new(Mutex::new(Vec::new()));
+    room.subscribe(MySubscriber::with_log(Arc::clone(&subscriber_log)));
 
-    let closure_log = Rc::new(RefCell::new(Vec::new()));
-    let closure_log_handle = Rc::clone(&closure_log);
+    let closure_log = Arc::new(Mutex::new(Vec::new()));
+    let closure_log_handle = Arc::clone(&closure_log);
     room.subscribe(move |device: &Device| {
         closure_log_handle
-            .borrow_mut()
+            .lock()
+            .unwrap()
             .push(format!("closure: {}", device.name()));
     });
 
@@ -55,8 +55,8 @@ fn main() {
     room.insert_device("Thermo_3".to_string(), Thermometer::default().into());
 
     println!("\n=== Observer logs ===");
-    println!("subscriber: {:?}", subscriber_log.borrow());
-    println!("closure: {:?}", closure_log.borrow());
+    println!("subscriber: {:?}", subscriber_log.lock().unwrap());
+    println!("closure: {:?}", closure_log.lock().unwrap());
 
     let device = Device::default();
     let socket1 = Socket::default();
