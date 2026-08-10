@@ -1,0 +1,30 @@
+[application]
+
+# App (Project) Name
+name = "frontend"
+
+# Dioxus App Default Platform: web
+default_platform = "web"
+
+# `build` & `serve` dist path
+out_dir = "dist"
+
+# resource (public) file folder
+asset_dir = "assets"
+
+[web.app]
+
+# HTML title tag content
+title = "Smart Home"
+
+[web.watcher]
+
+# when watcher trigger, regenerate the `index.html`
+reload_html = true
+
+# which files or dirs will be watcher monitoring
+watch_path = ["src", "assets"]
+
+# In dev, proxy /api to the backend on :3000.
+[[web.proxy]]
+backend = "http://127.0.0.1:3000/api"

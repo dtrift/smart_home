@@ -1,8 +1,7 @@
 //! Integration tests: use only the public `smart_home` API (as a downstream crate would).
 
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use smart_home::{
     Device, DeviceInfo, HomeBuilder, Power, Report, Reporter, Room, SmartHome, Socket, Subscriber,
@@ -143,33 +142,34 @@ fn reporter_collects_heterogeneous_reports() {
 
 #[derive(Default)]
 struct TestSubscriber {
-    names: Rc<RefCell<Vec<String>>>,
+    names: Arc<Mutex<Vec<String>>>,
 }
 
 impl TestSubscriber {
-    fn new(names: Rc<RefCell<Vec<String>>>) -> Self {
+    fn new(names: Arc<Mutex<Vec<String>>>) -> Self {
         Self { names }
     }
 }
 
 impl Subscriber for TestSubscriber {
     fn on_event(&mut self, device: &Device) {
-        self.names.borrow_mut().push(device.name().to_string());
+        self.names.lock().unwrap().push(device.name().to_string());
     }
 }
 
 #[test]
 fn room_notifies_subscribers_when_device_is_added() {
     let mut room = Room::default();
-    let object_events = Rc::new(RefCell::new(Vec::new()));
-    let closure_events = Rc::new(RefCell::new(Vec::new()));
+    let object_events = Arc::new(Mutex::new(Vec::new()));
+    let closure_events = Arc::new(Mutex::new(Vec::new()));
 
-    room.subscribe(TestSubscriber::new(Rc::clone(&object_events)));
+    room.subscribe(TestSubscriber::new(Arc::clone(&object_events)));
 
-    let closure_events_handle = Rc::clone(&closure_events);
+    let closure_events_handle = Arc::clone(&closure_events);
     room.subscribe(move |device: &Device| {
         closure_events_handle
-            .borrow_mut()
+            .lock()
+            .unwrap()
             .push(device.name().to_string());
     });
 
@@ -177,11 +177,11 @@ fn room_notifies_subscribers_when_device_is_added() {
     room.insert_device("Thermo_1".to_string(), Thermometer::default().into());
 
     assert_eq!(
-        object_events.borrow().as_slice(),
+        object_events.lock().unwrap().as_slice(),
         ["Socket".to_string(), "Thermometer".to_string()]
     );
     assert_eq!(
-        closure_events.borrow().as_slice(),
+        closure_events.lock().unwrap().as_slice(),
         ["Socket".to_string(), "Thermometer".to_string()]
     );
 }

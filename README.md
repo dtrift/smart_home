@@ -40,6 +40,21 @@ smart_home/
 │   └── simulated_home.rs     # Home with simulated devices
 ├── tests/
 │   └── integration.rs        # Integration tests (public API only)
+├── backend/                  # REST backend (axum): API + static frontend serving
+│   ├── Cargo.toml
+│   ├── src/
+│   │   ├── lib.rs            # app(state), api_router(), demo_state(), AppState
+│   │   ├── main.rs           # bind :3000
+│   │   ├── dto.rs            # RoomDto / DeviceDto / Create* (serde)
+│   │   ├── error.rs          # ApiError -> HTTP
+│   │   └── routes/           # rooms.rs, devices.rs, report.rs
+│   └── tests/
+│       └── api.rs            # Functional tests (reqwest, real HTTP)
+├── frontend/                 # Web frontend (Dioxus CSR, WASM)
+│   ├── Cargo.toml            # dioxus 0.6, isolated [workspace]
+│   ├── Dioxus.toml           # dx build/serve config, /api proxy (dev)
+│   ├── index.html            # shell + inline styles
+│   └── src/main.rs           # App, views: Rooms/Room/Device/Report
 └── ffi/                      # FFI sub-project (C ABI smart socket)
     ├── smart_socket_ffi/     # C ABI library
     ├── app_static/           # statically-linked demo
@@ -93,6 +108,82 @@ cargo fmt --all -- --check
 CI (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the same
 three steps: `cargo fmt --all -- --check`, `cargo clippy --workspace ...`, and
 `cargo test --workspace --all-features`.
+
+## Web Service (REST backend + static frontend)
+
+The `backend/` workspace member is an `axum` HTTP server that exposes the
+library as a REST API and also serves the static frontend from `frontend/`.
+State is held in memory under `Arc<RwLock<SmartHome>>` and preloaded with demo
+data (Kitchen / Living Room / Bedroom) on startup.
+
+> Note: to make the home shareable across async threads, the `Subscriber`
+> trait now requires `Send + Sync` (a source-compatible change for thread-safe
+> subscribers). See `src/home/room.rs`.
+
+### REST API
+
+| Method   | Path                                                | Body           | Response            |
+| -------- | --------------------------------------------------- | -------------- | ------------------- |
+| `GET`    | `/api/rooms`                                        |                | `[RoomDto]`         |
+| `POST`   | `/api/rooms`                                        | `{id, name?}`  | `RoomDto` · 201     |
+| `GET`    | `/api/rooms/{room_id}`                              |                | `RoomDto` · 404     |
+| `DELETE` | `/api/rooms/{room_id}`                              |                | `204` \| `404`      |
+| `GET`    | `/api/rooms/{room_id}/devices`                      |                | `[DeviceDto]`       |
+| `POST`   | `/api/rooms/{room_id}/devices`                      | `CreateDevice` | `DeviceDto` · 201   |
+| `GET`    | `/api/rooms/{room_id}/devices/{device_id}`          |                | `DeviceDto` · 404   |
+| `DELETE` | `/api/rooms/{room_id}/devices/{device_id}`          |                | `204` \| `404`      |
+| `POST`   | `/api/rooms/{room_id}/devices/{device_id}/turn_on`  |                | `DeviceDto`         |
+| `POST`   | `/api/rooms/{room_id}/devices/{device_id}/turn_off` |                | `DeviceDto`         |
+| `GET`    | `/api/report`                                       |                | `{report: String}`  |
+
+### Running the backend
+
+```bash
+# Start the backend (serves API on :3000 and the frontend from frontend/)
+cargo run -p backend
+
+# then open http://127.0.0.1:3000
+```
+
+### Frontend
+
+A [Dioxus](https://dioxuslabs.com) 0.6 CSR single-page app in `frontend/`
+(compiled to WASM). It is isolated from the workspace (its own `[workspace]`
+table) so it does not affect `cargo build/clippy --workspace`.
+
+It lets you:
+
+- list/add/remove rooms and open a room;
+- list/add/remove devices and open a device;
+- turn a socket on/off;
+- request the home report.
+
+Building/serving the frontend (requires `wasm32-unknown-unknown` and
+`dioxus-cli` 0.6):
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install dioxus-cli --version 0.6.3 --locked
+
+# dev server on :8080 (proxies /api to the backend on :3000)
+cd frontend && dx serve
+
+# production build (dx outputs to frontend/target/dx/.../public)
+cd frontend && dx build --release
+# copy the build into frontend/dist so the backend can serve it
+cp -r target/dx/frontend/release/web/public dist
+```
+
+In production the backend serves the built bundle from `frontend/dist`
+(`ServeDir` + fallback to `index.html`), so the frontend and API share one
+origin and there is no CORS/proxy setup needed.
+
+### Functional tests
+
+[`backend/tests/api.rs`](backend/tests/api.rs) boots the API on an ephemeral
+port and exercises the full flow over real HTTP with `reqwest`: create room →
+add device → turn on/off → report → delete device → delete room, including
+404/conflict/bad-request cases.
 
 ## Library Usage
 
@@ -216,7 +307,7 @@ The crate produces **three build artifacts** (see `crate-type` in
 [`ffi/smart_socket_ffi/Cargo.toml`](ffi/smart_socket_ffi/Cargo.toml)):
 
 | Artifact    | File                                         | Used by                                 |
-|-------------|----------------------------------------------|-----------------------------------------|
+| ----------- | -------------------------------------------- | --------------------------------------- |
 | `rlib`      | `libsmart_socket_ffi.rlib`                   | Rust consumers (`app_static`)           |
 | `staticlib` | `libsmart_socket_ffi.a`                      | C/C++ static linking                    |
 | `cdylib`    | `libsmart_socket_ffi.so` / `.dylib` / `.dll` | Runtime dynamic loading (`app_dynamic`) |

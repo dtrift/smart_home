@@ -1,2 +1,4 @@
 /target
 /tmp
+/frontend/target
+/frontend/dist
